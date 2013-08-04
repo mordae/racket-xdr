@@ -8,7 +8,7 @@
          racket/port)
 
 (provide type? int uint long ulong float double opaque opaque*
-         array array* optional structure bytes-len/c
+         array array* optional structure bool bytes-len/c
          dump load dump/bytes load/bytes)
 
 
@@ -212,6 +212,19 @@
          (if (= length 0)
            'null
            ((type-load type)))))
+
+     (make-type dump load))))
+
+
+(define/contract bool type?
+  ((thunk
+     (define/contract (dump value)
+                      (-> boolean? void?)
+       (void (write-bytes (integer->integer-bytes (if value 1 0) 4 #t #t))))
+
+     (define/contract (load)
+                      (-> boolean?)
+       (not (= 0 (integer-bytes->integer (read-bytes 4) #t #t))))
 
      (make-type dump load))))
 
