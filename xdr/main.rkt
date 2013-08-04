@@ -69,7 +69,7 @@
                       (-> uint/c)
        (integer-bytes->integer (read-bytes 4) #f #t))
 
-     (make-type load dump))))
+     (make-type dump load))))
 
 
 (define/contract long type?
