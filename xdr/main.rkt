@@ -5,10 +5,11 @@
 
 (require racket/contract
          racket/function
+         racket/dict
          racket/port)
 
 (provide type? int uint long ulong float double opaque opaque*
-         array array* optional structure bool bytes-len/c
+         array array* optional structure bool enum bytes-len/c
          dump load dump/bytes load/bytes)
 
 
@@ -191,6 +192,23 @@
        (let ((length (integer-bytes->integer (read-bytes 4) #t #t)))
          (for/list ((i (in-range length)))
            ((type-load type)))))
+
+     (make-type dump load))))
+
+
+(define/contract (enum members)
+                 (-> (listof (cons/c symbol? int/c)) type?)
+  ((thunk
+     (define/contract (dump value)
+                      (-> (apply one-of/c (dict-keys members)) void?)
+       (void (write-bytes
+               (integer->integer-bytes (dict-ref members value) 4 #t #t))))
+
+     (define/contract (load)
+                      (-> symbol?)
+       (let ((value (integer-bytes->integer (read-bytes 4) #t #t)))
+         (for/or (((k v) (in-dict members)))
+           (and (= v value) k))))
 
      (make-type dump load))))
 
