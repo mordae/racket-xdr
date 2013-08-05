@@ -34,6 +34,13 @@
          (<= (length v) len))))
 
 
+;; Contract for fixed length vector.
+(define (vector-len/c (len 2147483647))
+  (lambda (v)
+    (and (vector? v)
+         (= (vector-length v) len))))
+
+
 ;; Structure with both encoding and decoding function for given type.
 (define-struct type (dump load))
 
@@ -251,7 +258,7 @@
                  (->* () () #:rest (listof type?) type?)
   ((thunk
      (define/contract (dump value)
-                      (-> vector? void?)
+                      (-> (vector-len/c (length members)) void?)
        (for ((item-type  (in-list members))
              (item-value (in-vector value)))
          ((type-dump item-type) item-value)))
