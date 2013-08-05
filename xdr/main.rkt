@@ -205,7 +205,7 @@
                (integer->integer-bytes (dict-ref members value) 4 #t #t))))
 
      (define/contract (load)
-                      (-> symbol?)
+                      (-> (or/c symbol? #f))
        (let ((value (integer-bytes->integer (read-bytes 4) #t #t)))
          (for/or (((k v) (in-dict members)))
            (and (= v value) k))))
