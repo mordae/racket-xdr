@@ -4,295 +4,297 @@
 ;
 
 (require racket/contract
-         racket/function
          racket/dict
          racket/port)
 
-(provide type? int uint long ulong float double opaque opaque*
-         array array* optional structure bool enum bytes-len/c
-         dump load dump/bytes load/bytes)
+(provide
+  (contract-out
+    (type? predicate/c)
+
+    (structure (->i () ()
+                    #:rest (members (listof type?))
+                    (result (members) (type/c (members/c members)))))
+
+    (dump (->i ((type type?)
+                (value (type) (type-value/c type)))
+               ((out output-port?))
+               (result void?)))
+
+    (load (->i ((type type?))
+               ((in input-port?))
+               (result (type) (type-value/c type))))
+
+    (dump/bytes (->i ((type type?)
+                      (value (type) (type-value/c type)))
+                     ()
+                     (result bytes?)))
+
+    (load/bytes (->i ((type type?)
+                      (bstr bytes?))
+                     ()
+                     (result (type) (type-value/c type))))))
 
 
 ;; Contract for maximum length byte string.
 (define (bytes-len/c (len 2147483647))
-  (lambda (v)
-    (and (bytes? v)
-         (<= (bytes-length v) len))))
+  (procedure-rename
+    (lambda (v)
+      (and (bytes? v)
+           (<= (bytes-length v) len)))
+    (string->symbol
+      (format "bytes-len<=~a?" len))))
 
 
 ;; Contract for fixed length list.
 (define (list-len/c (len 2147483647))
-  (lambda (v)
-    (and (list? v)
-         (= (length v) len))))
+  (procedure-rename
+    (lambda (v)
+      (and (list? v)
+           (= (length v) len)))
+    (string->symbol
+      (format "list-len<=~a?" len))))
 
 
 ;; Contract for maximum length list.
 (define (list-max-len/c (len 2147483647))
-  (lambda (v)
-    (and (list? v)
-         (<= (length v) len))))
+  (procedure-rename
+    (lambda (v)
+      (and (list? v)
+           (<= (length v) len)))
+    (string->symbol
+      (format "list-max-len<=~a?" len))))
 
 
 ;; Contract for fixed length vector.
 (define (vector-len/c (len 2147483647))
-  (lambda (v)
-    (and (vector? v)
-         (= (vector-length v) len))))
+  (procedure-rename
+    (lambda (v)
+      (and (vector? v)
+           (= (vector-length v) len)))
+    (string->symbol
+      (format "vector-len=~a?" len))))
 
 
 ;; Structure with both encoding and decoding function for given type.
-(define-struct type (dump load))
+(struct type
+  (value/c dump load))
 
 
 ;; Integer types, because they are too long to be
 ;; included in the definitions below.
 (define int/c   (integer-in -2147483648 2147483647))
+(define size/c  (integer-in 0 2147483647))
 (define uint/c  (integer-in 0 4294967295))
 (define long/c  (integer-in -9223372036854775808 9223372036854775807))
 (define ulong/c (integer-in 0 18446744073709551615))
 
 
-(define/contract int type?
-  ((thunk
-     (define/contract (dump value)
-                      (-> int/c void?)
-       (void (write-bytes (integer->integer-bytes value 4 #t #t))))
-
-     (define/contract (load)
-                      (-> int/c)
-       (integer-bytes->integer (read-bytes 4) #t #t))
-
-     (make-type dump load))))
+;; Contract for type structure with given value contract.
+(define (type/c value/c)
+  (struct/c type
+            contract?
+            (-> value/c void?)
+            (-> value/c)))
 
 
-(define/contract uint type?
-  ((thunk
-     (define/contract (dump value)
-                      (-> uint/c void?)
-       (void (write-bytes (integer->integer-bytes value 4 #f #t))))
+;; Shortcut to define various types and type generators.
+(define-syntax define-xdr-type
+  (syntax-rules (define dump load)
+    ((define-xdr-type (name (arg arg/c) ...) value/c
+       (define (dump v) dump-body ...)
+       (define (load) load-body ...))
+     (begin
+       (provide
+         (contract-out
+           (name (->i ((arg arg/c) ...) ()
+                      (result (arg ...) (type/c value/c))))))
+       (define (name arg ...)
+         (type value/c
+               (λ (v) dump-body ... (void))
+               (λ () load-body ...)))))
 
-     (define/contract (load)
-                      (-> uint/c)
-       (integer-bytes->integer (read-bytes 4) #f #t))
-
-     (make-type dump load))))
-
-
-(define/contract long type?
-  ((thunk
-     (define/contract (dump value)
-                      (-> long/c void?)
-       (void (write-bytes (integer->integer-bytes value 8 #t #t))))
-
-     (define/contract (load)
-                      (-> long/c)
-       (integer-bytes->integer (read-bytes 8) #t #t))
-
-     (make-type dump load))))
-
-
-(define/contract ulong type?
-  ((thunk
-     (define/contract (dump value)
-                      (-> ulong/c void?)
-       (void (write-bytes (integer->integer-bytes value 8 #f #t))))
-
-     (define/contract (load)
-                      (-> ulong/c)
-       (integer-bytes->integer (read-bytes 8) #f #t))
-
-     (make-type dump load))))
+    ((define-xdr-type name value/c
+       (define (dump v) dump-body ...)
+       (define (load) load-body ...))
+     (begin
+       (provide
+         (contract-out
+           (name (type/c value/c))))
+       (define name
+         (type value/c
+               (λ (v) dump-body ... (void))
+               (λ () load-body ...)))))))
 
 
-(define/contract float type?
-  ((thunk
-     (define/contract (dump value)
-                      (-> real? void?)
-       (void (write-bytes (real->floating-point-bytes value 4 #t))))
+(define-xdr-type int int/c
+  (define (dump v)
+    (write-bytes (integer->integer-bytes v 4 #t #t)))
 
-     (define/contract (load)
-                      (-> real?)
-       (floating-point-bytes->real (read-bytes) #t))
+  (define (load)
+    (integer-bytes->integer (read-bytes 4) #t #t)))
 
-     (make-type dump load))))
+(define-xdr-type uint uint/c
+  (define (dump v)
+    (write-bytes (integer->integer-bytes v 4 #f #t)))
 
+  (define (load)
+    (integer-bytes->integer (read-bytes 4) #f #t)))
 
-(define/contract double type?
-  ((thunk
-     (define/contract (dump value)
-                      (-> real? void?)
-       (void (write-bytes (real->floating-point-bytes value 8 #t))))
+(define-xdr-type long long/c
+  (define (dump v)
+    (write-bytes (integer->integer-bytes v 8 #t #t)))
 
-     (define/contract (load)
-                      (-> real?)
-       (floating-point-bytes->real (read-bytes 8) #t))
+  (define (load)
+    (integer-bytes->integer (read-bytes 8) #t #t)))
 
-     (make-type dump load))))
+(define-xdr-type ulong ulong/c
+  (define (dump v)
+    (write-bytes (integer->integer-bytes v 8 #f #t)))
 
-
-(define/contract (opaque len)
-                 (-> (and/c positive? int/c) type?)
-  ((thunk
-     (define/contract (dump value)
-                      (-> (bytes-len/c len) void?)
-       (let ((buffer (make-bytes (* 4 (ceiling (/ len 4))))))
-         (bytes-copy! buffer 0 value)
-         (void (write-bytes buffer))))
-
-     (define/contract (load)
-                      (-> (bytes-len/c len))
-       (let ((aligned-length (* 4 (ceiling (/ len 4)))))
-         (subbytes (read-bytes aligned-length) 0 len)))
-
-     (make-type dump load))))
+  (define (load)
+    (integer-bytes->integer (read-bytes 8) #f #t)))
 
 
-(define/contract (opaque* (len 2147483647))
-                 (-> (and/c positive? int/c) type?)
-  ((thunk
-     (define/contract (dump value)
-                      (-> (bytes-len/c len) void?)
-       (let* ((aligned-length (* 4 (ceiling (/ (bytes-length value) 4))))
-              (buffer         (make-bytes (+ 4 aligned-length)))
-              (length         (bytes-length value)))
-         (bytes-copy! buffer 0 (integer->integer-bytes length 4 #t #t))
-         (bytes-copy! buffer 4 value)
-         (void (write-bytes buffer))))
+(define-xdr-type float real?
+  (define (dump v)
+    (write-bytes (real->floating-point-bytes v 4 #t)))
 
-     (define/contract (load)
-                      (-> (bytes-len/c len))
-       (let* ((length         (integer-bytes->integer (read-bytes 4) #t #t))
-              (aligned-length (* 4 (ceiling (/ length 4)))))
-         (subbytes (read-bytes aligned-length) 0 length)))
+  (define (load)
+    (floating-point-bytes->real (read-bytes 4) #t)))
 
-     (make-type dump load))))
+(define-xdr-type double real?
+  (define (dump v)
+    (write-bytes (real->floating-point-bytes v 8 #t)))
+
+  (define (load)
+    (floating-point-bytes->real (read-bytes 8) #t)))
 
 
-(define/contract (array type len)
-                 (-> type? (and/c positive? int/c) type?)
-  ((thunk
-     (define/contract (dump value)
-                      (-> (list-len/c len) void?)
-       (for ((item (in-list value)))
-         ((type-dump type) item)))
+(define (round-up len)
+  (* 4 (ceiling (/ len 4))))
 
-     (define/contract (load)
-                      (-> (list-len/c len))
-       (for/list ((i (in-range len)))
-         ((type-load type))))
+(define-xdr-type (opaque (len size/c))
+                 (bytes-len/c len)
+  (define (dump v)
+    (let ((buffer (make-bytes (round-up len))))
+      (bytes-copy! buffer 0 v)
+      (write-bytes buffer)))
 
-     (make-type dump load))))
+  (define (load)
+    (let ((aligned-length (round-up len)))
+      (subbytes (read-bytes aligned-length) 0 len))))
 
+(define-xdr-type (opaque* (len size/c))
+                 (bytes-len/c len)
+  (define (dump v)
+    (let* ((aligned-length (round-up len))
+           (buffer (make-bytes (+ 4 aligned-length)))
+           (length (bytes-length v)))
+      (bytes-copy! buffer 0 (integer->integer-bytes length 4 #t #t))
+      (bytes-copy! buffer 4 v)
+      (write-bytes buffer)))
 
-(define/contract (array* type (len 2147483647))
-                 (-> type? (and/c positive? int/c) type?)
-  ((thunk
-     (define/contract (dump value)
-                      (-> (list-max-len/c len) void?)
-       (void (write-bytes (integer->integer-bytes (length value) 4 #t #t)))
-       (for ((item (in-list value)))
-         ((type-dump type) item)))
-
-     (define/contract (load)
-                      (-> (list-max-len/c len))
-       (let ((length (integer-bytes->integer (read-bytes 4) #t #t)))
-         (for/list ((i (in-range length)))
-           ((type-load type)))))
-
-     (make-type dump load))))
+  (define (load)
+    (let* ((length (integer-bytes->integer (read-bytes 4) #t #t))
+           (aligned-length (round-up length)))
+      (subbytes (read-bytes aligned-length) 0 length))))
 
 
-(define/contract (enum members)
-                 (-> (listof (cons/c symbol? int/c)) type?)
-  ((thunk
-     (define/contract (dump value)
-                      (-> (apply one-of/c (dict-keys members)) void?)
-       (void (write-bytes
-               (integer->integer-bytes (dict-ref members value) 4 #t #t))))
+(define-xdr-type (array (type type?) (len size/c))
+                 (and/c (listof (type-value/c type))
+                        (list-len/c len))
+  (define (dump v)
+    (for ((item v))
+      ((type-dump type) item)))
 
-     (define/contract (load)
-                      (-> (or/c symbol? #f))
-       (let ((value (integer-bytes->integer (read-bytes 4) #t #t)))
-         (for/or (((k v) (in-dict members)))
-           (and (= v value) k))))
+  (define (load)
+    (for/list ((i len))
+      ((type-load type)))))
 
-     (make-type dump load))))
+(define-xdr-type (array* (type type?) (len size/c))
+                 (and/c (listof (type-value/c type))
+                        (list-max-len/c len))
+  (define (dump v)
+    (write-bytes (integer->integer-bytes (length v) 4 #t #t))
+    (for ((item v))
+      ((type-dump type) item)))
 
-
-(define/contract (optional type)
-                 (-> type? type?)
-  ((thunk
-     (define/contract (dump value)
-                      (-> any/c void?)
-       (if (eq? 'null value)
-         (void (write-bytes (integer->integer-bytes 0 4 #t #t)))
-         (begin
-           (void (write-bytes (integer->integer-bytes 1 4 #t #t)))
-           ((type-dump type) value))))
-
-     (define/contract (load)
-                      (-> any/c)
-       (let ((length (integer-bytes->integer (read-bytes 4) #t #t)))
-         (if (= length 0)
-           'null
-           ((type-load type)))))
-
-     (make-type dump load))))
+  (define (load)
+    (let ((length (integer-bytes->integer (read-bytes 4) #t #t)))
+      (for/list ((i length))
+        ((type-load type))))))
 
 
-(define/contract bool type?
-  ((thunk
-     (define/contract (dump value)
-                      (-> boolean? void?)
-       (void (write-bytes (integer->integer-bytes (if value 1 0) 4 #t #t))))
+(define-xdr-type (enum (members (listof (cons/c symbol? size/c))))
+                 symbol?
+  (define (dump v)
+    (write-bytes (integer->integer-bytes (dict-ref members v) 4 #t #t)))
 
-     (define/contract (load)
-                      (-> boolean?)
-       (not (= 0 (integer-bytes->integer (read-bytes 4) #t #t))))
+  (define (load)
+    (let ((v (integer-bytes->integer (read-bytes 4) #t #t)))
+      (for/or (((label value) (in-dict members)))
+        (and (= v value) label)))))
 
-     (make-type dump load))))
+(define-xdr-type (optional (type type?))
+                 (or/c void? (type-value/c type))
+  (define (dump v)
+    (cond
+      ((void? v)
+       (write-bytes (integer->integer-bytes 0 4 #t #t)))
+
+      (else
+       (write-bytes (integer->integer-bytes 1 4 #t #t))
+       ((type-dump type) v))))
+
+  (define (load)
+    (let ((length (integer-bytes->integer (read-bytes 4) #t #t)))
+      (cond
+        ((= length 0)
+         (void))
+
+        (else
+         ((type-load type)))))))
 
 
-(define/contract (structure . members)
-                 (->* () () #:rest (listof type?) type?)
-  ((thunk
-     (define/contract (dump value)
-                      (-> (vector-len/c (length members)) void?)
-       (for ((item-type  (in-list members))
-             (item-value (in-vector value)))
-         ((type-dump item-type) item-value)))
+(define-xdr-type bool boolean?
+  (define (dump v)
+    (write-bytes (integer->integer-bytes (if v 1 0) 4 #t #t)))
 
-     (define/contract (load)
-                      (-> vector?)
-       (for/vector ((item-type (in-list members)))
-         ((type-load item-type))))
-
-     (make-type dump load))))
+  (define (load)
+    (> (integer-bytes->integer (read-bytes 4) #f #t) 0)))
 
 
-(define/contract (dump type value (out (current-output-port)))
-                 (->* (type? any/c) (output-port?) void?)
+(define (members/c members)
+  (apply vector/c (map type-value/c members)))
+
+(define (structure . members)
+  (type (members/c members)
+        (λ (v)
+          (for ((type members)
+                (value v))
+            ((type-dump type) value)))
+
+        (λ ()
+          (for/vector ((type members))
+            ((type-load type))))))
+
+
+(define (dump type value (out (current-output-port)))
   (parameterize ((current-output-port out))
     ((type-dump type) value)))
 
-
-(define/contract (load type (in (current-input-port)))
-                 (->* (type?) (input-port?) any/c)
+(define (load type (in (current-input-port)))
   (parameterize ((current-input-port in))
     ((type-load type))))
 
 
-(define/contract (dump/bytes type value)
-                 (-> type? any/c bytes?)
+(define (dump/bytes type value)
   (with-output-to-bytes
-    (thunk (dump type value))))
+    (λ () (dump type value))))
 
-
-(define/contract (load/bytes type bstr)
-                 (-> type? bytes? any/c)
+(define (load/bytes type bstr)
   (with-input-from-bytes bstr
-    (thunk (load type))))
+    (λ () (load type))))
 
 
 ; vim:set ts=2 sw=2 et:
