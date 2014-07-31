@@ -11,6 +11,10 @@
   (contract-out
     (type? predicate/c)
 
+    (type-value/c (-> type? contract?))
+    (type-dump (-> type? (-> any/c void?)))
+    (type-load (-> type? (-> any/c)))
+
     (structure (->i () ()
                     #:rest (members (listof type?))
                     (result (members) (type/c (members/c members)))))
