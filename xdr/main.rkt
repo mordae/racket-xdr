@@ -39,14 +39,14 @@
                      (result (type) (type-value/c type))))))
 
 
-;; Contract for maximum length byte string.
-(define (bytes-len/c (len 2147483647))
+;; Contract for exact length byte string.
+(define (bytes-len/c len)
   (procedure-rename
     (lambda (v)
       (and (bytes? v)
-           (<= (bytes-length v) len)))
+           (= (bytes-length v) len)))
     (string->symbol
-      (format "bytes-len<=~a?" len))))
+      (format "bytes-len=~a?" len))))
 
 
 ;; Contract for fixed length list.
@@ -188,20 +188,19 @@
     (let ((aligned-length (round-up len)))
       (subbytes (read-bytes aligned-length) 0 len))))
 
-(define-xdr-type (opaque* (len size/c))
-                 (bytes-len/c len)
+(define-xdr-type opaque* bytes?
   (define (dump v)
-    (let* ((aligned-length (round-up len))
-           (buffer (make-bytes (+ 4 aligned-length)))
-           (length (bytes-length v)))
+    (let* ((length (bytes-length v))
+           (aligned (round-up length))
+           (buffer (make-bytes (+ 4 aligned))))
       (bytes-copy! buffer 0 (integer->integer-bytes length 4 #t #t))
       (bytes-copy! buffer 4 v)
       (write-bytes buffer)))
 
   (define (load)
     (let* ((length (integer-bytes->integer (read-bytes 4) #t #t))
-           (aligned-length (round-up length)))
-      (subbytes (read-bytes aligned-length) 0 length))))
+           (aligned (round-up length)))
+      (subbytes (read-bytes aligned) 0 length))))
 
 (define-xdr-type utf8* string?
   (define (dump v)
