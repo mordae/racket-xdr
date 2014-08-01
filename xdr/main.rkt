@@ -277,6 +277,13 @@
          ((type-load type)))))))
 
 
+(define-xdr-type nothing void?
+  (define (dump v)
+    (void))
+  (define (load)
+    (void)))
+
+
 (define-xdr-type bool boolean?
   (define (dump v)
     (write-bytes (integer->integer-bytes (if v 1 0) 4 #t #t)))
