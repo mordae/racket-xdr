@@ -246,14 +246,16 @@
 
 
 (define-xdr-type (enum (members (listof (cons/c symbol? size/c))))
-                 symbol?
+                 (or/c (apply symbols (map car members))
+                       exact-nonnegative-integer?)
   (define (dump v)
-    (write-bytes (integer->integer-bytes (dict-ref members v) 4 #t #t)))
+    (write-bytes (integer->integer-bytes (dict-ref members v v) 4 #t #t)))
 
   (define (load)
     (let ((v (integer-bytes->integer (read-bytes 4) #t #t)))
-      (for/or (((label value) (in-dict members)))
-        (and (= v value) label)))))
+      (or (for/or (((label value) (in-dict members)))
+            (and (= v value) label))
+          v))))
 
 (define-xdr-type (optional (type type?))
                  (or/c void? (type-value/c type))
