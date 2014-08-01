@@ -257,24 +257,18 @@
           v))))
 
 (define-xdr-type (optional (type type?))
-                 (or/c void? (type-value/c type))
+                 (or/c #f (type-value/c type))
   (define (dump v)
-    (cond
-      ((void? v)
-       (write-bytes (integer->integer-bytes 0 4 #t #t)))
-
-      (else
-       (write-bytes (integer->integer-bytes 1 4 #t #t))
-       ((type-dump type) v))))
+    (if v
+        (begin
+          (write-bytes (integer->integer-bytes 1 4 #t #t))
+          ((type-dump type) v))
+        (write-bytes (integer->integer-bytes 0 4 #t #t))))
 
   (define (load)
     (let ((length (integer-bytes->integer (read-bytes 4) #t #t)))
-      (cond
-        ((= length 0)
-         (void))
-
-        (else
-         ((type-load type)))))))
+      (and (> length 0)
+           ((type-load type))))))
 
 
 (define-xdr-type nothing void?
