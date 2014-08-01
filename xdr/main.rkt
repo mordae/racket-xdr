@@ -203,6 +203,22 @@
            (aligned-length (round-up length)))
       (subbytes (read-bytes aligned-length) 0 length))))
 
+(define-xdr-type utf8* string?
+  (define (dump v)
+    (let* ((bstr (string->bytes/utf-8 v))
+           (length (bytes-length bstr))
+           (aligned (round-up length))
+           (buffer (make-bytes (+ 4 aligned))))
+      (bytes-copy! buffer 0 (integer->integer-bytes length 4 #t #t))
+      (bytes-copy! buffer 4 bstr)
+      (write-bytes buffer)))
+
+  (define (load)
+    (let* ((length (integer-bytes->integer (read-bytes 4) #t #t))
+           (aligned (round-up length)))
+      (bytes->string/utf-8
+        (subbytes (read-bytes aligned) 0 length)))))
+
 
 (define-xdr-type (array (type type?) (len size/c))
                  (and/c (listof (type-value/c type))
