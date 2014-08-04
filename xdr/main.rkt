@@ -15,6 +15,12 @@
     (type-dump (-> type? (-> any/c void?)))
     (type-load (-> type? (-> any/c)))
 
+    (int/c contract?)
+    (uint/c contract?)
+    (size/c contract?)
+    (long/c contract?)
+    (ulong/c contract?)
+
     (structure (->i () ()
                     #:rest (members (listof type?))
                     (result (members) (type/c (members/c members)))))
