@@ -3,7 +3,7 @@
 Usage example:
 
 ```racket
-(require unstable/socket
+(require racket/unix-socket
          (prefix-in xdr: xdr))
 
 (define-values (in out)
